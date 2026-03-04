@@ -86,3 +86,7 @@ GIT_REPO_ANALYSIS/
 ├── README.md
 └── requirements.txt
 ```
+
+## Known Limitations
+
+- **Collaboration score may show 0** for all contributors if the GitHub API rate limit (5,000 requests/hour) is exhausted before review fetches complete. Fetching real `additions`/`deletions` for ~5,000 PRs uses one API call per PR, leaving insufficient quota for the reviews endpoint in the same run.
