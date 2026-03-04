@@ -1,21 +1,890 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hello World</title>
-  <style>
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      font-family: sans-serif;
-      background: #ffffff;
-    }
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Engineering Impact Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:       #080b14;
+    --bg2:      #0d1120;
+    --surface:  #111828;
+    --card:     #141c2e;
+    --card2:    #192032;
+    --border:   #1e2d45;
+    --border2:  #253550;
+    --mint:     #00e5a0;
+    --blue:     #4f8ef7;
+    --amber:    #f5a623;
+    --rose:     #f06292;
+    --purple:   #a78bfa;
+    --text:     #dde4f0;
+    --muted:    #5a6a8a;
+    --muted2:   #8898b8;
+    --rank1:    #ffd700;
+    --rank2:    #c0c0c0;
+    --rank3:    #cd7f32;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Noise overlay ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ── Grid background ── */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(79,142,247,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79,142,247,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none; z-index: 0;
+  }
+
+  .page-wrap { position: relative; z-index: 1; max-width: 1320px; margin: 0 auto; padding: 0 28px 80px; }
+
+  /* ── Header ── */
+  header {
+    padding: 42px 0 32px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 24px; flex-wrap: wrap;
+  }
+
+  .header-left { display: flex; flex-direction: column; gap: 6px; }
+
+  .repo-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--mint); background: rgba(0,229,160,0.08);
+    border: 1px solid rgba(0,229,160,0.2); border-radius: 20px;
+    padding: 4px 12px; width: fit-content; letter-spacing: 0.05em;
+  }
+
+  .repo-badge::before { content: '⬡'; font-size: 10px; }
+
+  h1 {
+    font-family: 'Syne', sans-serif; font-size: clamp(24px, 4vw, 40px);
+    font-weight: 800; line-height: 1.1;
+    background: linear-gradient(135deg, #dde4f0 30%, #4f8ef7 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .subtitle { font-size: 13px; color: var(--muted2); font-weight: 300; }
+
+  /* ── Stats strip ── */
+  .stats-strip {
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+
+  .stat-chip {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 10px 20px; background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; min-width: 90px;
+  }
+
+  .stat-chip .val {
+    font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 700;
+    color: var(--text);
+  }
+
+  .stat-chip .lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+
+  /* ── Controls ── */
+  .controls {
+    margin: 28px 0 24px;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+
+  .ctrl-label {
+    font-size: 12px; color: var(--muted2); text-transform: uppercase;
+    letter-spacing: 0.1em; font-weight: 500;
+  }
+
+  .topn-control {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 6px 14px;
+  }
+
+  .topn-control input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 160px; height: 4px;
+    background: var(--border2); border-radius: 2px; outline: none; cursor: pointer;
+  }
+
+  .topn-control input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px;
+    border-radius: 50%; background: var(--mint);
+    box-shadow: 0 0 10px rgba(0,229,160,0.5); cursor: pointer;
+  }
+
+  .topn-val {
+    font-family: 'JetBrains Mono', monospace; font-size: 15px;
+    font-weight: 500; color: var(--mint); min-width: 24px; text-align: center;
+  }
+
+  .sort-btns {
+    display: flex; gap: 6px;
+  }
+
+  .sort-btn {
+    padding: 6px 14px; font-size: 11px; font-family: 'DM Sans', sans-serif;
+    font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--muted2); border-radius: 8px; cursor: pointer;
+    transition: all 0.18s;
+  }
+
+  .sort-btn:hover { border-color: var(--border2); color: var(--text); }
+  .sort-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+  /* ── Cards grid ── */
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 16px;
+  }
+
+  /* ── Contributor card ── */
+  .c-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+    animation: cardIn 0.4s ease both;
+  }
+
+  @keyframes cardIn {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .c-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--border2);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(79,142,247,0.1);
+  }
+
+  /* glint on hover */
+  .c-card::after {
+    content: '';
+    position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);
+    transition: left 0.5s;
+  }
+  .c-card:hover::after { left: 150%; }
+
+  /* rank accent bar */
+  .c-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: var(--accent-color, transparent);
+    border-radius: 14px 14px 0 0;
+  }
+
+  .c-card.rank-1::before { background: linear-gradient(90deg, #ffd700, #ffed4e); }
+  .c-card.rank-2::before { background: linear-gradient(90deg, #a8b0c0, #d0d8e8); }
+  .c-card.rank-3::before { background: linear-gradient(90deg, #cd7f32, #e8a04a); }
+
+  .card-top {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .card-identity { display: flex; align-items: center; gap: 12px; }
+
+  .avatar {
+    width: 44px; height: 44px; border-radius: 50%;
+    border: 2px solid var(--border2);
+    background: var(--bg2); flex-shrink: 0;
+    object-fit: cover;
+  }
+
+  .avatar-fallback {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--surface), var(--card2));
+    border: 2px solid var(--border2);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 700;
+    color: var(--muted2); flex-shrink: 0;
+  }
+
+  .card-name { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; }
+  .card-rank {
+    font-size: 10px; color: var(--muted); font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px;
+  }
+
+  .total-score {
+    text-align: right;
+  }
+
+  .score-num {
+    font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 800;
+    line-height: 1;
+  }
+
+  .score-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-top: 2px; }
+
+  /* score bars */
+  .score-bars { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+
+  .bar-row { display: flex; align-items: center; gap: 10px; }
+
+  .bar-label {
+    font-size: 10px; color: var(--muted2); text-transform: uppercase;
+    letter-spacing: 0.07em; width: 68px; flex-shrink: 0;
+  }
+
+  .bar-track {
+    flex: 1; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%; border-radius: 3px;
+    transition: width 0.7s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  .bar-fill.ship  { background: linear-gradient(90deg, #00e5a0, #00c87a); }
+  .bar-fill.collab { background: linear-gradient(90deg, #4f8ef7, #7b6fef); }
+  .bar-fill.influence { background: linear-gradient(90deg, #f5a623, #f06292); }
+
+  .bar-val { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted2); width: 32px; text-align: right; }
+
+  /* card stats row */
+  .card-stats {
+    display: flex; gap: 0;
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+
+  .cs {
+    flex: 1; text-align: center; padding: 8px 4px;
+    border-right: 1px solid var(--border);
+  }
+
+  .cs:last-child { border-right: none; }
+
+  .cs-val {
+    font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 500; color: var(--text);
+  }
+
+  .cs-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+
+  /* ── MODAL ── */
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(8,11,20,0.88);
+    backdrop-filter: blur(8px);
+    display: none; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+
+  .modal-backdrop.open { display: flex; animation: fadeIn 0.2s ease; }
+
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .modal {
+    background: var(--card);
+    border: 1px solid var(--border2);
+    border-radius: 18px;
+    width: 100%; max-width: 900px;
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: modalIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
+    position: relative;
+  }
+
+  @keyframes modalIn {
+    from { opacity: 0; transform: scale(0.93) translateY(20px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  .modal-header {
+    padding: 24px 28px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; background: var(--card); z-index: 2;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .modal-identity { display: flex; align-items: center; gap: 14px; }
+
+  .modal-avatar {
+    width: 52px; height: 52px; border-radius: 50%;
+    border: 2px solid var(--border2);
+    background: var(--bg2);
+    object-fit: cover;
+  }
+
+  .modal-name { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; }
+  .modal-meta { font-size: 12px; color: var(--muted2); margin-top: 3px; }
+
+  .modal-score-badge {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  }
+
+  .modal-score-num {
+    font-family: 'Syne', sans-serif; font-size: 30px; font-weight: 800;
+    line-height: 1;
+  }
+
+  .modal-score-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+
+  .close-btn {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--bg2); border: 1px solid var(--border);
+    color: var(--muted2); font-size: 16px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s; margin-left: 16px;
+  }
+
+  .close-btn:hover { background: var(--surface); color: var(--text); }
+
+  .modal-body {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 0;
+    padding: 0;
+  }
+
+  @media (max-width: 640px) { .modal-body { grid-template-columns: 1fr; } }
+
+  .modal-col {
+    padding: 24px 28px;
+  }
+
+  .modal-col:first-child { border-right: 1px solid var(--border); }
+
+  .col-title {
+    font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted);
+    margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+  }
+
+  .col-title::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+
+  /* PR list */
+  .pr-list { display: flex; flex-direction: column; gap: 10px; }
+
+  .pr-item {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px;
+    transition: border-color 0.15s;
+  }
+
+  .pr-item:hover { border-color: var(--border2); }
+
+  .pr-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+
+  .pr-num {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500;
+    color: var(--blue); background: rgba(79,142,247,0.1);
+    padding: 2px 7px; border-radius: 4px; flex-shrink: 0; margin-top: 1px;
+  }
+
+  .pr-title { font-size: 12px; line-height: 1.45; color: var(--text); flex: 1; }
+
+  .pr-date { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); margin-top: 6px; }
+
+  /* diff bars */
+  .diff-bars { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+
+  .diff-row { display: flex; align-items: center; gap: 8px; }
+
+  .diff-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; width: 20px; flex-shrink: 0; }
+
+  .diff-label.add { color: var(--mint); }
+  .diff-label.del { color: var(--rose); }
+
+  .diff-bar { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+
+  .diff-bar-fill { height: 100%; border-radius: 2px; }
+  .diff-bar-fill.add { background: var(--mint); }
+  .diff-bar-fill.del { background: var(--rose); }
+
+  .diff-count { font-family: 'JetBrains Mono', monospace; font-size: 9px; width: 36px; text-align: right; }
+  .diff-count.add { color: var(--mint); }
+  .diff-count.del { color: var(--rose); }
+
+  /* breakdown panel */
+  .breakdown-scores { display: flex; flex-direction: column; gap: 20px; }
+
+  .bs-item { }
+
+  .bs-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .bs-name {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+    font-weight: 600;
+  }
+
+  .bs-val {
+    font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800;
+  }
+
+  .bs-track {
+    height: 8px; background: var(--border); border-radius: 4px; overflow: hidden;
+  }
+
+  .bs-fill {
+    height: 100%; border-radius: 4px;
+    transition: width 0.8s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  .bs-sub {
+    font-size: 11px; color: var(--muted2); margin-top: 6px;
+  }
+
+  /* mini stats in modal */
+  .modal-stats-row {
+    display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;
+  }
+
+  .mstat {
+    flex: 1; min-width: 80px;
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; text-align: center;
+  }
+
+  .mstat-val {
+    font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 500; color: var(--text);
+  }
+
+  .mstat-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin-top: 3px; }
+
+  /* weight pills */
+  .weight-pills { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
+
+  .wpill {
+    font-size: 10px; font-family: 'JetBrains Mono', monospace;
+    padding: 3px 9px; border-radius: 20px; border: 1px solid;
+  }
+
+  /* empty state */
+  .empty-prs {
+    text-align: center; padding: 32px 0;
+    color: var(--muted); font-size: 13px;
+  }
+
+  .empty-prs .icon { font-size: 28px; margin-bottom: 8px; }
+
+  /* score color */
+  .sc-high { color: var(--mint); }
+  .sc-mid  { color: var(--amber); }
+  .sc-low  { color: var(--muted2); }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+</style>
 </head>
 <body>
-  <h1>Hello World</h1>
+<div class="page-wrap">
+
+  <!-- Header -->
+  <header>
+    <div class="header-left">
+      <div class="repo-badge" id="repoBadge"></div>
+      <h1>Engineering Impact Dashboard</h1>
+      <div class="subtitle" id="headerSub"></div>
+    </div>
+    <div class="stats-strip" id="statsStrip"></div>
+  </header>
+
+  <!-- Controls -->
+  <div class="controls">
+    <span class="ctrl-label">Top</span>
+    <div class="topn-control">
+      <input type="range" id="topnSlider" min="1" max="20" value="5" />
+      <span class="topn-val" id="topnVal">5</span>
+    </div>
+    <span class="ctrl-label">Sort by</span>
+    <div class="sort-btns">
+      <button class="sort-btn active" data-sort="total_score">Total Score</button>
+      <button class="sort-btn" data-sort="prs_merged">PRs Merged</button>
+      <button class="sort-btn" data-sort="reviews_given">Reviews</button>
+      <button class="sort-btn" data-sort="shipping_score">Shipping</button>
+      <button class="sort-btn" data-sort="collab_score">Collab</button>
+    </div>
+  </div>
+
+  <!-- Cards -->
+  <div class="cards-grid" id="cardsGrid"></div>
+</div>
+
+<!-- Modal -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div class="modal-identity">
+        <img class="modal-avatar" id="mAvatar" src="" alt=""/>
+        <div>
+          <div class="modal-name" id="mName"></div>
+          <div class="modal-meta" id="mMeta"></div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="modal-score-badge">
+          <div class="modal-score-num" id="mScore"></div>
+          <div class="modal-score-lbl">Total Score</div>
+        </div>
+        <button class="close-btn" id="closeBtn">✕</button>
+      </div>
+    </div>
+
+    <div class="modal-body">
+      <!-- Left: PRs -->
+      <div class="modal-col">
+        <div class="modal-stats-row" id="mStatsRow"></div>
+        <div class="col-title">Recent Pull Requests</div>
+        <div class="pr-list" id="mPRList"></div>
+      </div>
+
+      <!-- Right: Breakdown -->
+      <div class="modal-col">
+        <div class="col-title">Score Breakdown</div>
+        <div class="weight-pills" id="mWeightPills"></div>
+        <div class="breakdown-scores" id="mBreakdown"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA_URL = "./data.json";
+let RAW_DATA = null;
+
+// ── State ──────────────────────────────────────────────────────────
+let topN = 5;
+let sortKey = 'total_score';
+let contributors = [];
+
+// ── Helpers ────────────────────────────────────────────────────────
+const fmt1 = v => v % 1 === 0 ? v.toFixed(0) : v.toFixed(1);
+const scoreClass = v => v >= 60 ? 'sc-high' : v >= 30 ? 'sc-mid' : 'sc-low';
+const avatarUrl = login => `https://github.com/${encodeURIComponent(login)}.png?size=80`;
+const ghUrl = (repo, num) => `https://github.com/${repo}/pull/${num}`;
+const SORTERS = {
+  total_score: (a, b) =>
+    (b.total_score || 0) - (a.total_score || 0) ||
+    (b.prs_merged || 0) - (a.prs_merged || 0) ||
+    (b.reviews_given || 0) - (a.reviews_given || 0) ||
+    a.login.localeCompare(b.login),
+  prs_merged: (a, b) =>
+    (b.prs_merged || 0) - (a.prs_merged || 0) ||
+    (b.shipping_score || 0) - (a.shipping_score || 0) ||
+    (b.total_score || 0) - (a.total_score || 0) ||
+    a.login.localeCompare(b.login),
+  reviews_given: (a, b) =>
+    (b.reviews_given || 0) - (a.reviews_given || 0) ||
+    (b.collab_score || 0) - (a.collab_score || 0) ||
+    (b.total_score || 0) - (a.total_score || 0) ||
+    a.login.localeCompare(b.login),
+  shipping_score: (a, b) =>
+    (b.shipping_score || 0) - (a.shipping_score || 0) ||
+    (b.prs_merged || 0) - (a.prs_merged || 0) ||
+    (b.total_score || 0) - (a.total_score || 0) ||
+    a.login.localeCompare(b.login),
+  collab_score: (a, b) =>
+    (b.collab_score || 0) - (a.collab_score || 0) ||
+    (b.reviews_given || 0) - (a.reviews_given || 0) ||
+    (b.total_score || 0) - (a.total_score || 0) ||
+    a.login.localeCompare(b.login),
+};
+
+function fmtDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function initials(login) {
+  return login.replace('[bot]','').split(/[-_.]/).map(p => p[0]).join('').toUpperCase().slice(0,2) || '??';
+}
+
+function getSorted() {
+  const sorter = SORTERS[sortKey] || SORTERS.total_score;
+  return [...contributors].sort(sorter).slice(0, topN);
+}
+
+function setGridMessage(message) {
+  document.getElementById('cardsGrid').innerHTML = `<div class="c-card" style="cursor:default">${message}</div>`;
+}
+
+function initHeader() {
+  document.getElementById('repoBadge').textContent = '⬡  ' + RAW_DATA.repo;
+  document.getElementById('headerSub').textContent =
+    `${RAW_DATA.days_analyzed}-day analysis · Generated ${new Date(RAW_DATA.generated_at).toLocaleDateString('en-US', {month:'long',day:'numeric',year:'numeric'})}`;
+
+  document.getElementById('statsStrip').innerHTML = [
+    { val: RAW_DATA.total_prs.toLocaleString(), lbl: 'Total PRs' },
+    { val: RAW_DATA.total_contributors, lbl: 'Contributors' },
+    { val: RAW_DATA.days_analyzed, lbl: 'Days' },
+    { val: (RAW_DATA.weights.shipping * 100).toFixed(0) + '%', lbl: 'Ship Weight' },
+    { val: (RAW_DATA.weights.collaboration * 100).toFixed(0) + '%', lbl: 'Collab Weight' },
+    { val: (RAW_DATA.weights.influence * 100).toFixed(0) + '%', lbl: 'Influence Wt' },
+  ].map(s => `<div class="stat-chip"><div class="val">${s.val}</div><div class="lbl">${s.lbl}</div></div>`).join('');
+}
+
+async function loadData() {
+  const response = await fetch(DATA_URL, { cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error(`Failed to load ${DATA_URL}: ${response.status} ${response.statusText}`);
+  }
+
+  RAW_DATA = await response.json();
+  contributors = Array.isArray(RAW_DATA.topN) ? RAW_DATA.topN : [];
+  topN = contributors.length > 0
+    ? Math.min(RAW_DATA.top_n || contributors.length, contributors.length)
+    : 1;
+  slider.max = String(Math.max(contributors.length, 1));
+  slider.value = String(topN);
+  topnValEl.textContent = String(topN);
+  initHeader();
+}
+
+// ── Render cards ───────────────────────────────────────────────────
+function render() {
+  const sorted = getSorted();
+  const grid = document.getElementById('cardsGrid');
+  grid.innerHTML = '';
+
+  if (sorted.length === 0) {
+    setGridMessage('No contributor data available.');
+    return;
+  }
+
+  sorted.forEach((c, i) => {
+    const rank = i + 1;
+    const rankClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : '';
+    const rankLabel = rank === 1 ? '🥇 #1' : rank === 2 ? '🥈 #2' : rank === 3 ? '🥉 #3' : `#${rank}`;
+
+    const card = document.createElement('div');
+    card.className = `c-card ${rankClass}`;
+    card.style.animationDelay = `${i * 0.05}s`;
+    card.innerHTML = `
+      <div class="card-top">
+        <div class="card-identity">
+          <img class="avatar" src="${avatarUrl(c.login)}" alt="${c.login}"
+               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
+          <div class="avatar-fallback" style="display:none">${initials(c.login)}</div>
+          <div>
+            <div class="card-name">${c.login}</div>
+            <div class="card-rank">${rankLabel}</div>
+          </div>
+        </div>
+        <div class="total-score">
+          <div class="score-num ${scoreClass(c.total_score)}">${fmt1(c.total_score)}</div>
+          <div class="score-lbl">Score</div>
+        </div>
+      </div>
+
+      <div class="score-bars">
+        <div class="bar-row">
+          <span class="bar-label">Shipping</span>
+          <div class="bar-track"><div class="bar-fill ship" style="width:${c.shipping_score}%"></div></div>
+          <span class="bar-val">${fmt1(c.shipping_score)}</span>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label">Collab</span>
+          <div class="bar-track"><div class="bar-fill collab" style="width:${c.collab_score}%"></div></div>
+          <span class="bar-val">${fmt1(c.collab_score)}</span>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label">Influence</span>
+          <div class="bar-track"><div class="bar-fill influence" style="width:${c.influence_score}%"></div></div>
+          <span class="bar-val">${fmt1(c.influence_score)}</span>
+        </div>
+      </div>
+
+      <div class="card-stats">
+        <div class="cs"><div class="cs-val">${c.prs_merged}</div><div class="cs-lbl">PRs</div></div>
+        <div class="cs"><div class="cs-val">${c.reviews_given}</div><div class="cs-lbl">Reviews</div></div>
+        <div class="cs"><div class="cs-val">${c.recent_prs.length}</div><div class="cs-lbl">Recent</div></div>
+      </div>
+    `;
+    card.addEventListener('click', () => openModal(c, rank));
+    grid.appendChild(card);
+  });
+}
+
+// ── Modal ──────────────────────────────────────────────────────────
+function openModal(c, rank) {
+  document.getElementById('mAvatar').src = avatarUrl(c.login);
+  document.getElementById('mName').textContent = c.login;
+  document.getElementById('mMeta').textContent =
+    `Rank #${rank} · ${c.prs_merged} PRs merged · ${c.reviews_given} reviews given`;
+
+  const sEl = document.getElementById('mScore');
+  sEl.textContent = fmt1(c.total_score);
+  sEl.className = 'modal-score-num ' + scoreClass(c.total_score);
+
+  // Mini stats
+  document.getElementById('mStatsRow').innerHTML = [
+    { val: c.prs_merged, lbl: 'PRs Merged' },
+    { val: c.reviews_given, lbl: 'Reviews' },
+    { val: c.avg_pr_size || '—', lbl: 'Avg PR Size' },
+    { val: c.comments_received || 0, lbl: 'Comments' },
+  ].map(s => `<div class="mstat"><div class="mstat-val">${s.val}</div><div class="mstat-lbl">${s.lbl}</div></div>`).join('');
+
+  // PR list
+  const prList = document.getElementById('mPRList');
+  if (!c.recent_prs || c.recent_prs.length === 0) {
+    prList.innerHTML = `<div class="empty-prs"><div class="icon">📭</div>No recent PRs found</div>`;
+  } else {
+    // For diff bars, find max additions/deletions for scaling
+    const maxAdd = Math.max(...c.recent_prs.map(p => p.additions || 0), 1);
+    const maxDel = Math.max(...c.recent_prs.map(p => p.deletions || 0), 1);
+
+    prList.innerHTML = c.recent_prs.slice(0, 5).map(pr => {
+      const hasLines = pr.additions > 0 || pr.deletions > 0;
+      const addPct = hasLines ? (pr.additions / maxAdd * 100) : 0;
+      const delPct = hasLines ? (pr.deletions / maxDel * 100) : 0;
+
+      return `
+        <div class="pr-item" title="Open on GitHub">
+          <div class="pr-top">
+            <span class="pr-num">#${pr.number}</span>
+            <span class="pr-title">${pr.title}</span>
+          </div>
+          <div class="pr-date">Merged ${fmtDate(pr.merged_at)}</div>
+          ${hasLines ? `
+          <div class="diff-bars">
+            <div class="diff-row">
+              <span class="diff-label add">+</span>
+              <div class="diff-bar"><div class="diff-bar-fill add" style="width:${addPct}%"></div></div>
+              <span class="diff-count add">+${pr.additions.toLocaleString()}</span>
+            </div>
+            <div class="diff-row">
+              <span class="diff-label del">−</span>
+              <div class="diff-bar"><div class="diff-bar-fill del" style="width:${delPct}%"></div></div>
+              <span class="diff-count del">−${pr.deletions.toLocaleString()}</span>
+            </div>
+          </div>` : `<div style="font-size:10px;color:var(--muted);margin-top:6px;">Line diff data not collected</div>`}
+        </div>
+      `;
+    }).join('');
+  }
+
+  // Weight pills
+  const w = RAW_DATA.weights;
+  document.getElementById('mWeightPills').innerHTML = `
+    <span class="wpill" style="color:var(--mint);border-color:rgba(0,229,160,0.3);background:rgba(0,229,160,0.07)">Shipping ×${w.shipping}</span>
+    <span class="wpill" style="color:var(--blue);border-color:rgba(79,142,247,0.3);background:rgba(79,142,247,0.07)">Collab ×${w.collaboration}</span>
+    <span class="wpill" style="color:var(--amber);border-color:rgba(245,166,35,0.3);background:rgba(245,166,35,0.07)">Influence ×${w.influence}</span>
+  `;
+
+  // Breakdown
+  const breakdowns = [
+    {
+      key: 'shipping_score', label: 'Shipping', val: c.shipping_score,
+      color: 'var(--mint)', bg: 'rgba(0,229,160,0.15)',
+      fill: 'linear-gradient(90deg, #00e5a0, #00c87a)',
+      sub: `${c.prs_merged} PRs merged over ${RAW_DATA.days_analyzed} days`,
+    },
+    {
+      key: 'collab_score', label: 'Collaboration', val: c.collab_score,
+      color: 'var(--blue)', bg: 'rgba(79,142,247,0.15)',
+      fill: 'linear-gradient(90deg, #4f8ef7, #7b6fef)',
+      sub: `${c.reviews_given} reviews given to other contributors`,
+    },
+    {
+      key: 'influence_score', label: 'Influence', val: c.influence_score,
+      color: 'var(--amber)', bg: 'rgba(245,166,35,0.15)',
+      fill: 'linear-gradient(90deg, #f5a623, #f06292)',
+      sub: `Composite of shipping momentum and PR reach`,
+    },
+    {
+      key: 'total_score', label: 'Total Score', val: c.total_score,
+      color: '#dde4f0', bg: 'rgba(221,228,240,0.1)',
+      fill: 'linear-gradient(90deg, #dde4f0, #8898b8)',
+      sub: `Weighted composite: ${(w.shipping*100).toFixed(0)}% ship + ${(w.collaboration*100).toFixed(0)}% collab + ${(w.influence*100).toFixed(0)}% influence`,
+    },
+  ];
+
+  document.getElementById('mBreakdown').innerHTML = breakdowns.map(b => `
+    <div class="bs-item">
+      <div class="bs-header">
+        <span class="bs-name" style="color:${b.color}">${b.label}</span>
+        <span class="bs-val" style="color:${b.color}">${fmt1(b.val)}</span>
+      </div>
+      <div class="bs-track" style="background:${b.bg}">
+        <div class="bs-fill" style="width:${Math.min(b.val,100)}%;background:${b.fill}"></div>
+      </div>
+      <div class="bs-sub">${b.sub}</div>
+    </div>
+  `).join('');
+
+  document.getElementById('modalBackdrop').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal() {
+  document.getElementById('modalBackdrop').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// ── Events ─────────────────────────────────────────────────────────
+document.getElementById('closeBtn').addEventListener('click', closeModal);
+document.getElementById('modalBackdrop').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+const slider = document.getElementById('topnSlider');
+const topnValEl = document.getElementById('topnVal');
+
+slider.addEventListener('input', () => {
+  topN = parseInt(slider.value);
+  topnValEl.textContent = topN;
+  render();
+});
+
+document.querySelectorAll('.sort-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    sortKey = btn.dataset.sort;
+    render();
+  });
+});
+
+// ── Init ───────────────────────────────────────────────────────────
+setGridMessage('Loading contributor data...');
+loadData()
+  .then(() => render())
+  .catch(err => {
+    console.error(err);
+    document.getElementById('headerSub').textContent = `Unable to load ${DATA_URL}`;
+    setGridMessage(`Unable to load contributor data from ${DATA_URL}. Serve this folder over HTTP so the browser can fetch the JSON file.`);
+  });
+</script>
 </body>
 </html>
