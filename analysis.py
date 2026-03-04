@@ -111,9 +111,47 @@ def get_repo_prs(repo, headers, cutoff):
 
     return all_prs
 
+# async def get_pr_reviews(pr, repo, headers, session, eng):
+#     author = pr["user"]["login"]
+#     try:
+#         async with session.get(
+#             f"{BASE}/repos/{repo}/pulls/{pr['number']}/reviews"
+#         ) as r:
+#             reviews = await r.json()
+
+#         seen_reviewers = set()
+#         for rev in reviews:
+#             reviewer = rev["user"]["login"]
+#             if reviewer != author and reviewer not in seen_reviewers:
+#                 eng[reviewer]["reviews_given"] += 1
+#                 seen_reviewers.add(reviewer)
+#     except Exception:
+#         pass
+
 async def get_pr_reviews(pr, repo, headers, session, eng):
     author = pr["user"]["login"]
     try:
+        # fetch individual PR to get real additions/deletions
+        async with session.get(
+            f"{BASE}/repos/{repo}/pulls/{pr['number']}"
+        ) as r:
+            detail = await r.json()
+            real_adds = detail.get("additions", 0)
+            real_dels = detail.get("deletions", 0)
+
+            eng[author]["additions"] += real_adds
+            eng[author]["deletions"] += real_dels
+            eng[author]["pr_sizes"].append(real_adds + real_dels)
+            eng[author]["comments_received"] += detail.get("review_comments", 0)  # ← fixed
+
+            # patch the matching recent_pr entry with real values
+            for recent_pr in eng[author]["recent_prs"]:
+                if recent_pr["number"] == pr["number"]:
+                    recent_pr["additions"] = real_adds
+                    recent_pr["deletions"] = real_dels
+                    break
+
+        # fetch reviews
         async with session.get(
             f"{BASE}/repos/{repo}/pulls/{pr['number']}/reviews"
         ) as r:
@@ -199,9 +237,6 @@ async def main():
         dels = pr.get("deletions", 0)
 
         eng[author]["prs_merged"] += 1
-        eng[author]["additions"] += adds # no of lines added in the code
-        eng[author]["deletions"] += dels # no of lines deleted in the code
-        eng[author]["pr_sizes"].append(adds + dels) # size of the PR = additions + deletions
         eng[author]["comments_received"] += pr.get("review_comments", 0)
         eng[author]["recent_prs"].append(
             {
